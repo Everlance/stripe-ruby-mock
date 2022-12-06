@@ -66,6 +66,24 @@ module StripeMock
           end
         end
 
+        if params[:promotion_code]
+          promotion_code_id = params[:promotion_code]
+
+          promotion_code = promotion_codes[promotion_code_id]
+
+          if promotion_code
+            coupon_id = promotion_code[:coupon][:id]
+            coupon = coupons[coupon_id]
+            if coupon
+              add_coupon_to_object(subscription, coupon)
+            else
+              raise Stripe::InvalidRequestError.new("No such coupon: #{coupon_id}", 'coupon', http_status: 400)
+            end
+          else
+            raise Stripe::InvalidRequestError.new("No such promotion code: #{promotion_code_id}", 'promotion_code', http_status: 400)
+          end
+        end
+
         subscriptions[subscription[:id]] = subscription
         add_subscription_to_customer(customer, subscription)
 
@@ -102,7 +120,7 @@ module StripeMock
           customer[:default_source] = new_card[:id]
         end
 
-        allowed_params = %w(customer application_fee_percent coupon items metadata plan quantity source tax_percent trial_end trial_from_plan trial_period_days current_period_start created prorate billing_cycle_anchor billing days_until_due idempotency_key enable_incomplete_payments cancel_at_period_end default_tax_rates payment_behavior pending_invoice_item_interval)
+        allowed_params = %w(customer application_fee_percent coupon promotion_code items metadata plan quantity source tax_percent trial_end trial_from_plan trial_period_days current_period_start created prorate billing_cycle_anchor billing days_until_due idempotency_key enable_incomplete_payments cancel_at_period_end default_tax_rates payment_behavior pending_invoice_item_interval)
         unknown_params = params.keys - allowed_params.map(&:to_sym)
         if unknown_params.length > 0
           raise Stripe::InvalidRequestError.new("Received unknown parameter: #{unknown_params.join}", unknown_params.first.to_s, http_status: 400)
@@ -118,6 +136,10 @@ module StripeMock
         # Note: needs updating for subscriptions with multiple plans
         verify_card_present(customer, subscription_plans.first, subscription, params)
 
+        if params[:coupon] && params[:promotion_code]
+          raise Stripe::InvalidRequestError.new("You may only specify one of these parameters: coupon, promotion_code", "coupon", http_status: 400)
+        end
+
         if params[:coupon]
           coupon_id = params[:coupon]
 
@@ -130,6 +152,24 @@ module StripeMock
             add_coupon_to_object(subscription, coupon)
           else
             raise Stripe::InvalidRequestError.new("No such coupon: #{coupon_id}", 'coupon', http_status: 400)
+          end
+        end
+
+        if params[:promotion_code]
+          promotion_code_id = params[:promotion_code]
+
+          promotion_code = promotion_codes[promotion_code_id]
+
+          if promotion_code
+            coupon_id = promotion_code[:coupon][:id]
+            coupon = coupons[coupon_id]
+            if coupon
+              add_coupon_to_object(subscription, coupon)
+            else
+              raise Stripe::InvalidRequestError.new("No such coupon: #{coupon_id}", 'coupon', http_status: 400)
+            end
+          else
+            raise Stripe::InvalidRequestError.new("No such promotion code: #{promotion_code_id}", 'promotion_code', http_status: 400)
           end
         end
 
@@ -194,6 +234,34 @@ module StripeMock
             subscription[:discount] = nil
           else
             raise Stripe::InvalidRequestError.new("No such coupon: #{coupon_id}", 'coupon', http_status: 400)
+          end
+        end
+
+        if params[:promotion_code]
+          promotion_code_id = params[:promotion_code]
+
+          promotion_code = promotion_codes[promotion_code_id]
+
+          if promotion_code
+            # You can't apply a promotion code with amount restrictions on the Customer object or on a subscription
+            # update API call
+            if promotion_code[:restrictions][:minimum_amount]
+              raise Stripe::InvalidRequestError.new(
+                "This promotion code cannot be redeemed on a subcription update because it uses the `minimum_amount` restriction.",
+                "promotion_code",
+                http_status: 400
+              )
+            end
+
+            coupon_id = promotion_code[:coupon][:id]
+            coupon = coupons[coupon_id]
+            if coupon
+              add_coupon_to_object(subscription, coupon)
+            else
+              raise Stripe::InvalidRequestError.new("No such coupon: #{coupon_id}", 'coupon', http_status: 400)
+            end
+          else
+            raise Stripe::InvalidRequestError.new("No such promotion code: #{promotion_code_id}", 'promotion_code', http_status: 400)
           end
         end
 
